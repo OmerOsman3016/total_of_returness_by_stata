@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https: 'unsafe-inline' 'unsafe-eval'">
+  <meta name="description" content="Sudan | Displacement Tracking Matrix-Returnees Flow" />
+ 
+  
+  <!-- External CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  
+  <!-- Internal CSS -->
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: Arial, sans-serif;
+    }
+
+    .map-container {
+      position: relative;
+      width: 100%;
+      height: 100vh;
+    }
+
+    #map3 {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      right: 0;
+      left: 0;
+    }
+
+    #map-title-3 {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255, 255, 255, 0.9);
+      padding: 8px 16px;
+      border-radius: 4px;
+      z-index: 1000;
+      margin: 0;
+      font-size: 1.2em;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+
+    .drilldown-back {
+      position: absolute;
+      top: 50px;
+      left: 10px;
+      z-index: 1000;
+      background: #fff;
+      border: 1px solid #ccc;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      display: none;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .drilldown-back:hover {
+      background: #f0f0f0;
+    }
+
+    .legend {
+      background: #fff;
+      border-radius: 5px;
+      padding: 10px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      line-height: 1.4;
+    }
+
+    .legend h4 {
+      margin: 0 0 8px 0;
+      font-size: 14px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      margin-bottom: 5px;
+    }
+
+    .legend-circle {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      margin-right: 8px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      font-size: 10px;
+      font-weight: bold;
+    }
+
+    .leaflet-popup-content {
+      font-size: 14px;
+    }
+
+    .leaflet-popup-content b {
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <div class="map-container">
+  <h2 id="map-title-3" style="color: #2A81CB;">Total Number of IDPs by State</h2>
+    <button id="drilldown-back" class="drilldown-back">← Back to States</button>
+    <div id="map3" class="map"></div>
+  </div>
+
+  <!-- External JS -->
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/esri-leaflet@3.0.0/dist/esri-leaflet.js"></script>
+  <script src="https://unpkg.com/@tweenjs/tween.js@18.6.4/dist/tween.umd.js"></script>
+  <script src="./src/CanvasFlowmapLayer.js"></script>
+  <script src="https://unpkg.com/papaparse@5.3.0/papaparse.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+  <script>
+    // Configuration constants
+    const MAP_CONFIG = {
+      center: [16, 30],
+      zoom: L.Browser.mobile ? 3 : 6,
+      minZoom: 4,
+      maxZoom: 18,
+      padding: [50, 50]
+    };
+
+    const MARKER_STYLES = {
+      state: {
+        fillColor: '#418FDE',
+        color: '#fff',
+        weight: 1,
+        opacity: 1,
+        fillOpacity: 0.7,
+        baseRadius: 8,
+        maxRadius: 28
+      },
+      district: {
+        fillColor: '#418FDE',
+        color: '#fff',
+        weight: 1,
+        opacity: 1,
+        fillOpacity: 0.7,
+        baseRadius: 8,
+        maxRadius: 28
+      }
+    };
+
+    // Initialize the map
+    const map3 = L.map('map3', {
+      center: MAP_CONFIG.center,
+      zoom: MAP_CONFIG.zoom,
+      minZoom: MAP_CONFIG.minZoom,
+      maxZoom: MAP_CONFIG.maxZoom
+    });
+
+    // Base layers configuration
+    const BASE_LAYERS = {
+      "Mapbox Custom": L.tileLayer(
+        'https://api.mapbox.com/styles/v1/omerosman/cm8oy6is4006101si7ll3bs4h/tiles/{z}/{x}/{y}?access_token=pk.eyJ1Ijoib21lcm9zbWFuIiwiYSI6ImUxZDBkODBlNjQxMDE2M2Y3OTQ3MWIwNTJkMjgzZTI3In0.ekCHuxRflTOO0RpQ6rQR7Q', {
+          attribution: '© <a href="https://www.mapbox.com/about/maps/">Mapbox</a> © <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+          tileSize: 512,
+          zoomOffset: -1
+        }
+      ),
+      "CartoDB Light": L.tileLayer(
+        'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }
+      ),
+      "OpenStreetMap": L.tileLayer(
+        'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }
+      ),
+      "Esri World Imagery": L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+          attribution: '&copy; <a href="https://www.esri.com/">Esri</a>'
+        }
+      ),
+      "Stamen Toner": L.tileLayer(
+        'https://stamen-tiles-{s}.a.ssl.fastly.net/toner/{z}/{x}/{y}.png', {
+          attribution: 'Map tiles by <a href="http://stamen.com">Stamen Design</a>'
+        }
+      )
+    };
+
+    // Add default base layer
+    BASE_LAYERS["Mapbox Custom"].addTo(map3);
+    
+    // Add layer control
+    L.control.layers(BASE_LAYERS).addTo(map3);
+
+    // Layer groups for state and district markers
+    const stateMarkersLayer = L.layerGroup();
+    const districtMarkersLayer = L.layerGroup();
+    let currentState = null;
+    const drilldownBackBtn = document.getElementById('drilldown-back');
+
+    // Initialize the map with state data
+    function initializeMap() {
+      loadStateData();
+      setupEventListeners();
+      addLegend();
+      startAnimationLoop();
+    }
+
+    // Load state data from CSV
+    function loadStateData() {
+      Papa.parse('./data/total_idps.csv', {
+        download: true,
+        header: true,
+        dynamicTyping: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+          if (!results.data || results.data.length === 0) {
+            console.error('No data found in CSV');
+            return;
+          }
+
+          const geoJsonData = convertToGeoJSON(results.data);
+          createStateMarkers(geoJsonData);
+        },
+        error: (error) => {
+          console.error('Error loading state data:', error);
+          showError('Failed to load state data. Please try again.');
+        }
+      });
+    }
+
+    // Convert CSV data to GeoJSON format
+    function convertToGeoJSON(data) {
+      return {
+        type: 'FeatureCollection',
+        features: data.map(datum => ({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [datum.lon, datum.lat] },
+          properties: datum
+        }))
+      };
+    }
+
+    // Create state markers from GeoJSON data
+    function createStateMarkers(geoJsonData) {
+      const maxTotalIdps = Math.max(...geoJsonData.features.map(f => f.properties.total_idps));
+
+      L.geoJSON(geoJsonData, {
+        pointToLayer: (feature, latlng) => {
+          const marker = createCircleMarker(
+            latlng, 
+            feature.properties.total_idps, 
+            maxTotalIdps, 
+            MARKER_STYLES.state
+          );
+
+          // Add click handler for drill-down
+          marker.on('click', () => handleStateClick(feature.properties.state));
+          
+          return marker;
+        },
+        onEachFeature: (feature, layer) => {
+          addPopupAndTooltip(layer, feature.properties, 'state');
+        }
+      }).addTo(stateMarkersLayer);
+
+      map3.addLayer(stateMarkersLayer);
+    }
+
+    // Create a circle marker with animation
+    function createCircleMarker(latlng, value, maxValue, style) {
+      const normalizedValue = value / maxValue;
+      const baseRadius = style.baseRadius + (normalizedValue * (style.maxRadius - style.baseRadius));
+      
+      const marker = L.circleMarker(latlng, {
+        radius: baseRadius,
+        fillColor: style.fillColor,
+        color: style.color,
+        weight: style.weight,
+        opacity: style.opacity,
+        fillOpacity: style.fillOpacity
+      });
+
+      animateCircleMarker(marker, baseRadius);
+      return marker;
+    }
+
+    // Animate a circle marker
+    function animateCircleMarker(marker, baseRadius) {
+      new TWEEN.Tween({ radius: baseRadius })
+        .to({ radius: baseRadius * 1.5 }, 1000)
+        .easing(TWEEN.Easing.Sinusoidal.InOut)
+        .yoyo(true)
+        .repeat(Infinity)
+        .onUpdate(({ radius }) => marker.setRadius(radius))
+        .start();
+    }
+
+    // Add popup and tooltip to a layer
+    function addPopupAndTooltip(layer, properties, level) {
+      if (level === 'state') {
+        layer.bindPopup(`
+          <div class="popup-content">
+            <h4>${properties.state}</h4>
+            <p><b>Total IDPs:</b> ${properties.total_idps.toLocaleString()}</p>
+            <p class="click-hint">Click to view districts</p>
+          </div>
+        `, { maxWidth: 250 });
+
+        layer.bindTooltip(`
+          <div class="tooltip-content">
+            <b>${properties.state}</b><br/>
+            ${properties.total_idps.toLocaleString()} IDPs
+          </div>
+        `);
+      } else {
+        layer.bindPopup(`
+          <div class="popup-content">
+            <h4>${properties.district}</h4>
+            <p><b>Total IDPs:</b> ${properties.total_idps.toLocaleString()}</p>
+          </div>
+        `, { maxWidth: 250 });
+
+        layer.bindTooltip(`
+          <div class="tooltip-content">
+            <b>${properties.district}</b><br/>
+            ${properties.total_idps.toLocaleString()} IDPs
+          </div>
+        `);
+      }
+    }
+
+    // Handle state click for drill-down
+    function handleStateClick(stateName) {
+      map3.removeLayer(stateMarkersLayer);
+      loadDistrictData(stateName);
+    }
+
+    // Load district data for a state
+    function loadDistrictData(stateName) {
+      document.getElementById('map-title-3').textContent = `Loading districts for ${stateName}...`;
+      
+      Papa.parse('./data/districts_data.csv', {
+        download: true,
+        header: true,
+        dynamicTyping: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+          if (!results.data || results.data.length === 0) {
+            showError('No district data found for this state');
+            return;
+          }
+
+          const stateDistricts = results.data.filter(d => d.state === stateName);
+          createDistrictMarkers(stateDistricts, stateName);
+        },
+        error: (error) => {
+          console.error('Error loading district data:', error);
+          showError('Failed to load district data. Please try again.');
+          resetToStateView();
+        }
+      });
+    }
+
+    // Create district markers
+    function createDistrictMarkers(districts, stateName) {
+      districtMarkersLayer.clearLayers();
+      const maxTotalIdps = Math.max(...districts.map(d => d.total_idps));
+
+      districts.forEach(district => {
+        const marker = createCircleMarker(
+          [district.lat, district.lon], 
+          district.total_idps, 
+          maxTotalIdps, 
+          MARKER_STYLES.district
+        );
+
+        addPopupAndTooltip(marker, district, 'district');
+        districtMarkersLayer.addLayer(marker);
+      });
+
+      map3.addLayer(districtMarkersLayer);
+      updateUIForDistrictView(stateName, districts);
+      currentState = stateName;
+    }
+
+    // Update UI for district view
+    function updateUIForDistrictView(stateName, districts) {
+      document.getElementById('map-title-3').textContent = `IDPs by District in ${stateName}`;
+      drilldownBackBtn.style.display = 'block';
+
+      if (districts.length > 0) {
+        const bounds = L.latLngBounds(districts.map(d => [d.lat, d.lon]));
+        map3.fitBounds(bounds, { padding: MAP_CONFIG.padding });
+      }
+    }
+
+    // Reset to state view
+    function resetToStateView() {
+      map3.removeLayer(districtMarkersLayer);
+      map3.addLayer(stateMarkersLayer);
+      map3.setView(MAP_CONFIG.center, MAP_CONFIG.zoom);
+      document.getElementById('map-title-3').textContent = 'Total Number of IDPs by State';
+      drilldownBackBtn.style.display = 'none';
+      currentState = null;
+    }
+
+    // Show error message
+    function showError(message) {
+      console.error(message);
+      // Create a more user-friendly error display
+      const errorDiv = document.createElement('div');
+      errorDiv.className = 'error-message';
+      errorDiv.style.position = 'absolute';
+      errorDiv.style.top = '60px';
+      errorDiv.style.left = '50%';
+      errorDiv.style.transform = 'translateX(-50%)';
+      errorDiv.style.backgroundColor = '#ffebee';
+      errorDiv.style.color = '#c62828';
+      errorDiv.style.padding = '10px 20px';
+      errorDiv.style.borderRadius = '4px';
+      errorDiv.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
+      errorDiv.style.zIndex = '1000';
+      errorDiv.textContent = message;
+      
+      document.querySelector('.map-container').appendChild(errorDiv);
+      
+      // Remove after 5 seconds
+      setTimeout(() => {
+        errorDiv.remove();
+      }, 5000);
+    }
+
+    // Add legend to the map
+    function addLegend() {
+      const legend = L.control({ position: 'bottomright' });
+      
+      legend.onAdd = () => {
+        const div = L.DomUtil.create('div', 'legend');
+        div.innerHTML = `
+          <h4>IDPs by State</h4>
+          <div class="legend-item">
+            <div class="legend-circle" style="background: #418FDE; width: 10px; height: 10px;"></div>
+            <span>&lt; 500,000 IDPs</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-circle" style="background: #418FDE; width: 20px; height: 20px;"></div>
+            <span>500,001 - 1,000,000 IDPs</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-circle" style="background: #418FDE; width: 30px; height: 30px;"></div>
+            <span>&gt; 1,000,001 IDPs</span>
+          </div>
+          <div style="margin-top: 10px; font-size: 0.8em; color: #666;">
+            Click on a state to view districts
+          </div>
+        `;
+        return div;
+      };
+      
+      legend.addTo(map3);
+    }
+
+    // Setup event listeners
+    function setupEventListeners() {
+      drilldownBackBtn.addEventListener('click', resetToStateView);
+    }
+
+    // Start Tween.js animation loop
+    function startAnimationLoop() {
+      function animate() {
+        requestAnimationFrame(animate);
+        TWEEN.update();
+      }
+      animate();
+    }
+
+    // Initialize the map when DOM is loaded
+    document.addEventListener('DOMContentLoaded', initializeMap);
+  </script>
+</body>
+</html>
